@@ -758,3 +758,22 @@ pre {
     background: var(--border-color);
     margin: 4px 8px;
 }
+
+.context-menu.open-left .context-submenu {
+    left: auto;
+    right: 100%;
+    margin-left: 0;
+    margin-right: 4px;
+    box-shadow: -4px 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.context-menu.open-left .submenu-arrow {
+    transform: rotate(180deg);
+    display: inline-block;
+}
+
+.context-menu-item.submenu-align-bottom .context-submenu {
+    top: auto;
+    bottom: -1px;
+    /* Align with bottom border */
+}

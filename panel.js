@@ -35,7 +35,7 @@ const contextMenu = document.getElementById('context-menu');
 document.addEventListener('DOMContentLoaded', () => {
     // Wait for html2canvas to be available
     waitForHtml2Canvas();
-    
+
     setupNetworkListener();
     setupEventListeners();
     setupResizeHandle();
@@ -65,15 +65,15 @@ function setupContextMenu() {
     // Right-click on editors
     [rawRequestInput, rawResponseDisplay].forEach(editor => {
         if (!editor) return;
-        
+
         editor.addEventListener('contextmenu', (e) => {
             const selection = window.getSelection();
             const selectedText = selection.toString().trim();
-            
+
             if (!selectedText) {
                 return; // Don't show menu if no text selected
             }
-            
+
             e.preventDefault();
             showContextMenu(e.clientX, e.clientY, editor);
         });
@@ -103,13 +103,13 @@ function setupContextMenu() {
     document.addEventListener('keydown', (e) => {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const modKey = isMac ? e.metaKey : e.ctrlKey;
-        
+
         if (modKey && e.key === 'e' && !e.shiftKey && !e.altKey) {
             const activeElement = document.activeElement;
             if (activeElement === rawRequestInput || activeElement === rawResponseDisplay) {
                 const selection = window.getSelection();
                 const selectedText = selection.toString().trim();
-                
+
                 if (selectedText) {
                     e.preventDefault();
                     const rect = activeElement.getBoundingClientRect();
@@ -125,17 +125,54 @@ function setupContextMenu() {
 function showContextMenu(x, y, targetElement) {
     contextMenu.dataset.target = targetElement === rawRequestInput ? 'request' : 'response';
     contextMenu.classList.add('show');
+    contextMenu.classList.remove('open-left');
+
+    // Reset to defaults to measure
     contextMenu.style.left = x + 'px';
     contextMenu.style.top = y + 'px';
-    
-    // Adjust position if menu goes off screen
+    contextMenu.style.bottom = 'auto';
+    contextMenu.style.right = 'auto';
+
+    // Reset submenu alignment
+    const submenuItems = contextMenu.querySelectorAll('.has-submenu');
+    submenuItems.forEach(item => item.classList.remove('submenu-align-bottom'));
+
     const rect = contextMenu.getBoundingClientRect();
-    if (rect.right > window.innerWidth) {
-        contextMenu.style.left = (x - rect.width) + 'px';
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+
+    // Vertical Adjustment (Main Menu)
+    if (rect.bottom > winHeight) {
+        contextMenu.style.top = 'auto';
+        contextMenu.style.bottom = (winHeight - y) + 'px';
     }
-    if (rect.bottom > window.innerHeight) {
-        contextMenu.style.top = (y - rect.height) + 'px';
+
+    // Horizontal Adjustment (Main Menu)
+    if (rect.right > winWidth) {
+        contextMenu.style.left = 'auto';
+        contextMenu.style.right = (winWidth - x) + 'px';
+        contextMenu.classList.add('open-left');
     }
+
+    // Check Submenu Overflow
+    submenuItems.forEach(item => {
+        const submenu = item.querySelector('.context-submenu');
+        if (submenu) {
+            // Temporarily show to measure
+            submenu.style.display = 'block';
+            submenu.style.visibility = 'hidden';
+            const subRect = submenu.getBoundingClientRect();
+            submenu.style.display = '';
+            submenu.style.visibility = '';
+
+            // If submenu goes off bottom, align to bottom
+            // We use the item's top position + submenu height to predict
+            const itemRect = item.getBoundingClientRect();
+            if (itemRect.top + subRect.height > winHeight) {
+                item.classList.add('submenu-align-bottom');
+            }
+        }
+    });
 }
 
 function hideContextMenu() {
@@ -145,18 +182,18 @@ function hideContextMenu() {
 function handleEncodeDecode(action) {
     const targetType = contextMenu.dataset.target;
     const editor = targetType === 'request' ? rawRequestInput : rawResponseDisplay;
-    
+
     if (!editor) return;
-    
+
     // Get selected text
     const selection = window.getSelection();
     if (!selection.rangeCount) return;
-    
+
     const range = selection.getRangeAt(0);
     const selectedText = range.toString();
-    
+
     if (!selectedText.trim()) return;
-    
+
     // Save undo state BEFORE making any changes (only for request editor)
     const isRequestEditor = editor === rawRequestInput;
     if (isRequestEditor) {
@@ -168,9 +205,9 @@ function handleEncodeDecode(action) {
         }
         rawRequestInput._undoDisabled = true;
     }
-    
+
     let transformedText = '';
-    
+
     try {
         switch (action) {
             case 'base64-encode':
@@ -213,14 +250,14 @@ function handleEncodeDecode(action) {
             default:
                 return;
         }
-        
+
         // Replace selected text
         if (editor.contentEditable === 'true') {
             // For contenteditable div
             range.deleteContents();
             const textNode = document.createTextNode(transformedText);
             range.insertNode(textNode);
-            
+
             // Update selection
             range.setStartAfter(textNode);
             range.collapse(true);
@@ -236,12 +273,12 @@ function handleEncodeDecode(action) {
                 editor.textContent = before + transformedText + after;
             }
         }
-        
+
         // Re-apply syntax highlighting if it's the request editor
         if (targetType === 'request' && editor === rawRequestInput) {
             const currentContent = editor.innerText || editor.textContent;
             editor.innerHTML = highlightHTTP(currentContent);
-            
+
             // Save the new state after conversion (re-enable undo tracking)
             setTimeout(() => {
                 if (isRequestEditor) {
@@ -249,7 +286,7 @@ function handleEncodeDecode(action) {
                     saveUndoState();
                 }
             }, 0);
-            
+
             // Try to restore cursor position after syntax highlighting
             try {
                 const newSelection = window.getSelection();
@@ -261,7 +298,7 @@ function handleEncodeDecode(action) {
                 const fullTextBefore = editor.innerText || editor.textContent;
                 const start = fullTextBefore.indexOf(selectedText);
                 const cursorPos = start !== -1 ? start + transformedText.length : 0;
-                
+
                 for (const node of textNodes) {
                     const nodeLength = node.textContent.length;
                     if (charCount + nodeLength >= cursorPos) {
@@ -271,7 +308,7 @@ function handleEncodeDecode(action) {
                     }
                     charCount += nodeLength;
                 }
-                
+
                 if (startNode) {
                     newRange.setStart(startNode, Math.min(startOffset, startNode.textContent.length));
                     newRange.collapse(true);
@@ -292,7 +329,7 @@ function handleEncodeDecode(action) {
                 rawRequestInput._undoDisabled = false;
             }
         }
-        
+
     } catch (error) {
         console.error('Encode/decode error:', error);
         if (isRequestEditor) {
@@ -320,30 +357,30 @@ function decodeJWT(jwt) {
     try {
         // Remove whitespace
         jwt = jwt.trim();
-        
+
         // Split JWT into parts (header.payload.signature)
         const parts = jwt.split('.');
-        
+
         if (parts.length !== 3) {
             throw new Error('Invalid JWT format. Expected format: header.payload.signature');
         }
-        
+
         // Base64URL decode helper
         function base64UrlDecode(str) {
             // Replace base64url characters with base64 characters
             str = str.replace(/-/g, '+').replace(/_/g, '/');
-            
+
             // Add padding if needed
             while (str.length % 4) {
                 str += '=';
             }
-            
+
             // Decode base64
             try {
                 const decoded = atob(str);
                 // Convert to JSON string
                 return decodeURIComponent(
-                    decoded.split('').map(function(c) {
+                    decoded.split('').map(function (c) {
                         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
                     }).join('')
                 );
@@ -351,7 +388,7 @@ function decodeJWT(jwt) {
                 throw new Error('Failed to decode base64: ' + e.message);
             }
         }
-        
+
         // Decode header
         let header;
         try {
@@ -360,7 +397,7 @@ function decodeJWT(jwt) {
         } catch (e) {
             throw new Error('Failed to decode JWT header: ' + e.message);
         }
-        
+
         // Decode payload
         let payload;
         try {
@@ -369,7 +406,7 @@ function decodeJWT(jwt) {
         } catch (e) {
             throw new Error('Failed to decode JWT payload: ' + e.message);
         }
-        
+
         // Format output
         let output = 'JWT Decoded:\n\n';
         output += '=== HEADER ===\n';
@@ -379,7 +416,7 @@ function decodeJWT(jwt) {
         output += '\n\n=== SIGNATURE ===\n';
         output += parts[2] + '\n';
         output += '(Signature verification not performed)';
-        
+
         // Add helpful info if exp claim exists
         if (payload.exp) {
             const expDate = new Date(payload.exp * 1000);
@@ -394,9 +431,9 @@ function decodeJWT(jwt) {
                 output += `Expires in ${Math.floor((expDate - now) / 1000 / 60)} minutes`;
             }
         }
-        
+
         return output;
-        
+
     } catch (error) {
         throw new Error('JWT decode failed: ' + error.message);
     }
@@ -418,12 +455,12 @@ function setupUndoRedo() {
             }
         }, 500);
     });
-    
+
     // Handle Ctrl+Z / Cmd+Z for undo
     rawRequestInput.addEventListener('keydown', (e) => {
         const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
         const modKey = isMac ? e.metaKey : e.ctrlKey;
-        
+
         if (modKey && e.key === 'z' && !e.shiftKey && !e.altKey) {
             e.preventDefault();
             undo();
@@ -455,15 +492,15 @@ function saveUndoState() {
 
 function undo() {
     if (undoStack.length <= 1) return; // Keep at least one state
-    
+
     // Save current state to redo stack
     const currentContent = rawRequestInput.innerText || rawRequestInput.textContent;
     redoStack.push(currentContent);
-    
+
     // Remove current state and get previous
     undoStack.pop(); // Remove current
     const previousContent = undoStack[undoStack.length - 1];
-    
+
     if (previousContent !== undefined) {
         rawRequestInput.textContent = previousContent;
         rawRequestInput.innerHTML = highlightHTTP(previousContent);
@@ -472,7 +509,7 @@ function undo() {
 
 function redo() {
     if (redoStack.length === 0) return;
-    
+
     const nextContent = redoStack.pop();
     if (nextContent !== undefined) {
         undoStack.push(nextContent);
@@ -484,15 +521,15 @@ function redo() {
 function waitForHtml2Canvas() {
     // Check if html2canvas is already loaded (check both window.html2canvas and global html2canvas)
     const checkHtml2Canvas = () => {
-        return typeof html2canvas !== 'undefined' || 
-               (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined');
+        return typeof html2canvas !== 'undefined' ||
+            (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined');
     };
-    
+
     if (checkHtml2Canvas()) {
         console.log('html2canvas loaded');
         return;
     }
-    
+
     // Wait for it to load (check every 100ms for up to 5 seconds)
     let attempts = 0;
     const maxAttempts = 50;
@@ -540,7 +577,7 @@ function setupNetworkListener() {
 
         // Store the capture time for relative time display
         request.capturedAt = Date.now();
-        
+
         requests.push(request);
         renderRequestItem(request, requests.length - 1);
     });
@@ -548,7 +585,7 @@ function setupNetworkListener() {
 
 function formatTime(capturedAt) {
     if (!capturedAt) return '';
-    
+
     const date = new Date(capturedAt);
     const hours = date.getHours().toString().padStart(2, '0');
     const minutes = date.getMinutes().toString().padStart(2, '0');
@@ -702,11 +739,11 @@ function selectRequest(index) {
     requestHistory = [];
     historyIndex = -1;
     addToHistory(rawText, useHttpsCheckbox.checked);
-    
+
     // Initialize Undo/Redo
     undoStack = [rawText];
     redoStack = [];
-    
+
     // Initialize Undo/Redo
     undoStack = [rawText];
     redoStack = [];
@@ -734,7 +771,7 @@ function setupEventListeners() {
     regexToggle.addEventListener('click', () => {
         useRegex = !useRegex;
         regexToggle.classList.toggle('active', useRegex);
-        
+
         // Update search term based on mode
         if (useRegex) {
             currentSearchTerm = searchBar.value;
@@ -743,7 +780,7 @@ function setupEventListeners() {
             currentSearchTerm = searchBar.value.toLowerCase();
             searchBar.placeholder = 'Filter requests...';
         }
-        
+
         filterRequests();
     });
 
@@ -793,7 +830,7 @@ function setupEventListeners() {
 
     // Context Menu for Encode/Decode
     setupContextMenu();
-    
+
     // Undo/Redo for request editor
     setupUndoRedo();
 }
@@ -851,21 +888,21 @@ function showCopySuccess(btn) {
 
 async function captureScreenshot() {
     // Get html2canvas function (check both global and window scope)
-    let html2canvasFn = typeof html2canvas !== 'undefined' 
-        ? html2canvas 
-        : (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined' 
-            ? window.html2canvas 
+    let html2canvasFn = typeof html2canvas !== 'undefined'
+        ? html2canvas
+        : (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined'
+            ? window.html2canvas
             : null);
-    
+
     if (!html2canvasFn) {
         // Try waiting a moment for the script to load
         await new Promise(resolve => setTimeout(resolve, 200));
-        html2canvasFn = typeof html2canvas !== 'undefined' 
-            ? html2canvas 
-            : (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined' 
-                ? window.html2canvas 
+        html2canvasFn = typeof html2canvas !== 'undefined'
+            ? html2canvas
+            : (typeof window !== 'undefined' && typeof window.html2canvas !== 'undefined'
+                ? window.html2canvas
                 : null);
-        
+
         if (!html2canvasFn) {
             console.error('html2canvas library not loaded');
             const originalHtml = screenshotBtn.innerHTML;
@@ -885,7 +922,7 @@ async function captureScreenshot() {
     try {
         // Capture the main content area (both request and response panes)
         const mainContent = document.querySelector('.main-content');
-        
+
         if (!mainContent) {
             throw new Error('Main content area not found');
         }
@@ -896,7 +933,7 @@ async function captureScreenshot() {
         const responsePaneBody = responsePane ? responsePane.querySelector('.pane-body') : null;
         const requestEditor = document.getElementById('raw-request-input');
         const responseDisplay = document.getElementById('raw-response-display');
-        
+
         // Store original styles and scroll positions
         const originalStyles = {
             requestPaneBody: requestPaneBody ? {
@@ -937,71 +974,71 @@ async function captureScreenshot() {
             requestPaneBody.style.height = 'auto';
             requestPaneBody.style.maxHeight = 'none';
         }
-        
+
         if (responsePaneBody) {
             responsePaneBody.style.overflow = 'visible';
             responsePaneBody.style.height = 'auto';
             responsePaneBody.style.maxHeight = 'none';
         }
-        
+
         if (requestEditor) {
             requestEditor.style.overflow = 'visible';
             requestEditor.style.height = 'auto';
             requestEditor.style.maxHeight = 'none';
             requestEditor.scrollTop = 0;
         }
-        
+
         if (responseDisplay) {
             responseDisplay.style.overflow = 'visible';
             responseDisplay.style.height = 'auto';
             responseDisplay.style.maxHeight = 'none';
             responseDisplay.scrollTop = 0;
         }
-        
+
         mainContent.style.overflow = 'visible';
         mainContent.scrollTop = 0;
 
         // Calculate full content heights before capturing
         // We need to measure each element's full content height
-        
+
         if (requestEditor) {
             // Get full content height by temporarily expanding
             requestEditor.style.overflow = 'visible';
             requestEditor.style.height = 'auto';
             requestEditor.style.maxHeight = 'none';
-            
+
             // Force browser to recalculate layout
             void requestEditor.offsetHeight;
-            
+
             // Get the actual full height including all content
             const fullEditorHeight = Math.max(
                 requestEditor.scrollHeight,
                 requestEditor.clientHeight,
                 requestEditor.offsetHeight
             );
-            
+
             requestEditor.style.height = fullEditorHeight + 'px';
         }
-        
+
         if (responseDisplay) {
             // Get full content height by temporarily expanding
             responseDisplay.style.overflow = 'visible';
             responseDisplay.style.height = 'auto';
             responseDisplay.style.maxHeight = 'none';
-            
+
             // Force browser to recalculate layout
             void responseDisplay.offsetHeight;
-            
+
             // Get the actual full height including all content
             const fullDisplayHeight = Math.max(
                 responseDisplay.scrollHeight,
                 responseDisplay.clientHeight,
                 responseDisplay.offsetHeight
             );
-            
+
             responseDisplay.style.height = fullDisplayHeight + 'px';
         }
-        
+
         if (requestPaneBody) {
             requestPaneBody.style.height = 'auto';
             void requestPaneBody.offsetHeight; // Force reflow
@@ -1010,7 +1047,7 @@ async function captureScreenshot() {
                 requestPaneBody.clientHeight
             ) + 'px';
         }
-        
+
         if (responsePaneBody) {
             responsePaneBody.style.height = 'auto';
             void responsePaneBody.offsetHeight; // Force reflow
@@ -1019,28 +1056,28 @@ async function captureScreenshot() {
                 responsePaneBody.clientHeight
             ) + 'px';
         }
-        
+
         // Wait for layout recalculation
         await new Promise(resolve => setTimeout(resolve, 300));
-        
+
         // Calculate full height including all panes and their headers
         let requestPaneFullHeight = 0;
         let responsePaneFullHeight = 0;
-        
+
         if (requestPane) {
             // Include header height + body height
             const requestHeader = requestPane.querySelector('.pane-header');
             const headerHeight = requestHeader ? requestHeader.offsetHeight : 0;
             requestPaneFullHeight = headerHeight + (requestPaneBody ? requestPaneBody.scrollHeight : 0);
         }
-        
+
         if (responsePane) {
             // Include header height + body height
             const responseHeader = responsePane.querySelector('.pane-header');
             const headerHeight = responseHeader ? responseHeader.offsetHeight : 0;
             responsePaneFullHeight = headerHeight + (responsePaneBody ? responsePaneBody.scrollHeight : 0);
         }
-        
+
         // Use the maximum of both panes to ensure we capture everything
         const fullHeight = Math.max(
             requestPaneFullHeight,
@@ -1048,7 +1085,7 @@ async function captureScreenshot() {
             mainContent.scrollHeight,
             mainContent.offsetHeight
         ) + 100; // Extra padding to ensure we get everything
-        
+
         const fullWidth = Math.max(
             mainContent.scrollWidth,
             mainContent.offsetWidth
@@ -1073,7 +1110,7 @@ async function captureScreenshot() {
                 if (clonedMainContent) {
                     clonedMainContent.style.overflow = 'visible';
                     clonedMainContent.style.height = fullHeight + 'px';
-                    
+
                     // Expand all pane bodies
                     const clonedPaneBodies = clonedDoc.querySelectorAll('.pane-body');
                     clonedPaneBodies.forEach(paneBody => {
@@ -1083,11 +1120,11 @@ async function captureScreenshot() {
                         // Force expansion
                         paneBody.style.display = 'flex';
                     });
-                    
+
                     // Expand editors and set explicit heights based on content
                     const clonedRequestEditor = clonedDoc.getElementById('raw-request-input');
                     const clonedResponseDisplay = clonedDoc.getElementById('raw-response-display');
-                    
+
                     if (clonedRequestEditor) {
                         clonedRequestEditor.style.overflow = 'visible';
                         clonedRequestEditor.style.height = 'auto';
@@ -1100,7 +1137,7 @@ async function captureScreenshot() {
                             clonedRequestEditor.clientHeight
                         ) + 'px';
                     }
-                    
+
                     if (clonedResponseDisplay) {
                         clonedResponseDisplay.style.overflow = 'visible';
                         clonedResponseDisplay.style.height = 'auto';
@@ -1123,27 +1160,27 @@ async function captureScreenshot() {
             requestPaneBody.style.height = originalStyles.requestPaneBody.height || '';
             requestPaneBody.style.maxHeight = originalStyles.requestPaneBody.maxHeight || '';
         }
-        
+
         if (responsePaneBody && originalStyles.responsePaneBody) {
             responsePaneBody.style.overflow = originalStyles.responsePaneBody.overflow || '';
             responsePaneBody.style.height = originalStyles.responsePaneBody.height || '';
             responsePaneBody.style.maxHeight = originalStyles.responsePaneBody.maxHeight || '';
         }
-        
+
         if (requestEditor && originalStyles.requestEditor) {
             requestEditor.style.overflow = originalStyles.requestEditor.overflow || '';
             requestEditor.style.height = originalStyles.requestEditor.height || '';
             requestEditor.style.maxHeight = originalStyles.requestEditor.maxHeight || '';
             requestEditor.scrollTop = originalScrollPositions.requestEditor;
         }
-        
+
         if (responseDisplay && originalStyles.responseDisplay) {
             responseDisplay.style.overflow = originalStyles.responseDisplay.overflow || '';
             responseDisplay.style.height = originalStyles.responseDisplay.height || '';
             responseDisplay.style.maxHeight = originalStyles.responseDisplay.maxHeight || '';
             responseDisplay.scrollTop = originalScrollPositions.responseDisplay;
         }
-        
+
         mainContent.style.overflow = originalStyles.mainContent.overflow || '';
         mainContent.style.height = originalStyles.mainContent.height || '';
         mainContent.scrollTop = originalScrollPositions.mainContent;
@@ -1158,7 +1195,7 @@ async function captureScreenshot() {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            
+
             // Generate filename with timestamp
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
             const method = selectedRequest ? selectedRequest.request.method : 'REQUEST';
@@ -1175,7 +1212,7 @@ async function captureScreenshot() {
                 }
             }
             const filename = `request-response-${method}-${pathPart}-${timestamp}.png`;
-            
+
             link.download = filename;
             document.body.appendChild(link);
             link.click();
@@ -1250,7 +1287,7 @@ function filterRequests() {
             // Use regex matching
             try {
                 const regex = new RegExp(currentSearchTerm);
-                matchesSearch = 
+                matchesSearch =
                     regex.test(url) ||
                     regex.test(method) ||
                     regex.test(headersText) ||
@@ -1265,7 +1302,7 @@ function filterRequests() {
             }
         } else {
             // Plain text matching (case-insensitive)
-            matchesSearch = 
+            matchesSearch =
                 urlLower.includes(currentSearchTerm) ||
                 method.includes(currentSearchTerm.toUpperCase()) ||
                 headersTextLower.includes(currentSearchTerm) ||
@@ -1298,8 +1335,8 @@ function filterRequests() {
         regexToggle.title = 'Invalid regex pattern';
     } else {
         regexToggle.classList.remove('error');
-        regexToggle.title = useRegex 
-            ? 'Regex mode enabled (click to disable)' 
+        regexToggle.title = useRegex
+            ? 'Regex mode enabled (click to disable)'
             : 'Toggle Regex Mode (enable to use regex patterns)';
     }
 
